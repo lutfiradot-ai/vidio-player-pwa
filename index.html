@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Player PWA</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#e50914">
+
+<style>
+:root {
+  --bg:#0f0f0f; --card:#1c1c1c; --accent:#e50914;
+  --text:#fff; --muted:#aaa;
+}
+body {
+  margin:0; font-family:Arial,sans-serif;
+  background:var(--bg); color:var(--text);
+}
+header {
+  padding:16px; text-align:center;
+  font-size:20px; font-weight:bold;
+}
+.container { padding:12px; }
+button {
+  width:100%; padding:12px; margin-bottom:10px;
+  border:none; border-radius:10px;
+  background:var(--accent); color:white;
+  font-size:15px; cursor:pointer;
+}
+video {
+  width:100%; max-height:55vh;
+  background:black; border-radius:12px;
+}
+.item {
+  background:var(--card); padding:12px;
+  border-radius:10px; margin-top:8px;
+  cursor:pointer;
+}
+.item:hover { background:#2a2a2a; }
+.empty { color:var(--muted); text-align:center; margin-top:20px; }
+</style>
+</head>
+
+<body>
+
+<header>🎬 Video Player PWA</header>
+
+<div class="container">
+  <button id="installBtn" hidden>📲 Install App</button>
+  <button onclick="pick()">➕ Tambah Video</button>
+
+  <video id="player" controls></video>
+
+  <div id="list"></div>
+  <div class="empty" id="empty">Playlist kosong 😴</div>
+</div>
+
+<input type="file" id="file" accept="video/*" multiple hidden>
+
+<script>
+/* ===== Service Worker ===== */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+
+/* ===== Install PWA ===== */
+let deferredPrompt;
+const installBtn = document.getElementById("installBtn");
+
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  installBtn.hidden = false;
+});
+
+installBtn.onclick = () => {
+  deferredPrompt.prompt();
+  installBtn.hidden = true;
+};
+
+/* ===== IndexedDB ===== */
+let db;
+const openDB = indexedDB.open("videoDB",1);
+
+openDB.onupgradeneeded = e => {
+  db = e.target.result;
+  db.createObjectStore("videos",{keyPath:"id",autoIncrement:true});
+};
+
+openDB.onsuccess = e => {
+  db = e.target.result;
+  load();
+};
+
+const file = document.getElementById("file");
+const list = document.getElementById("list");
+const player = document.getElementById("player");
+const empty = document.getElementById("empty");
+
+function pick(){ file.click(); }
+
+file.onchange = () => {
+  const tx = db.transaction("videos","readwrite");
+  const store = tx.objectStore("videos");
+  [...file.files].forEach(f => store.add({name:f.name,file:f}));
+  tx.oncomplete = load;
+};
+
+function load(){
+  list.innerHTML="";
+  const tx = db.transaction("videos","readonly");
+  const store = tx.objectStore("videos");
+  store.getAll().onsuccess = e => {
+    const data = e.target.result;
+    empty.style.display = data.length?"none":"block";
+    data.forEach(v=>{
+      const div=document.createElement("div");
+      div.className="item";
+      div.textContent=v.name;
+      div.onclick=()=>{
+        player.src=URL.createObjectURL(v.file);
+        player.play();
+      };
+      list.appendChild(div);
+    });
+  };
+}
+</script>
+
+</body>
+</html>
